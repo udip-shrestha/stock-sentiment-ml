@@ -68,6 +68,9 @@ def download_market_data(ticker: str, lookback_days: int) -> pd.DataFrame:
     if history.empty:
         raise ValueError(f"No market data returned for ticker '{ticker}'.")
 
+    if isinstance(history.columns, pd.MultiIndex):
+        history.columns = history.columns.get_level_values(0)
+
     history = history.reset_index()
     history["date"] = pd.to_datetime(history["Date"]).dt.tz_localize(None)
     history["return_1d"] = history["Close"].pct_change()

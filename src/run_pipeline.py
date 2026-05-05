@@ -59,7 +59,11 @@ def run_pipeline(
     lookback_days: int,
 ) -> dict[str, object]:
     ensure_directories()
-    credentials = get_reddit_credentials()
+    try:
+        credentials = get_reddit_credentials()
+    except Exception:
+        credentials = None
+
 
     raw_posts = scrape_stock_posts(
         credentials=credentials,
@@ -94,7 +98,8 @@ def run_pipeline(
     market_path = RAW_DATA_DIR / f"{ticker.lower()}_market_data.csv"
     _write_frame(market_data, market_path)
 
-    modeling_frame = build_modeling_frame(daily_sentiment=daily_sentiment, market_data=market_data)
+    modeling_frame = build_modeling_frame(sentiment_daily=daily_sentiment, market_data=market_data)
+
     modeling_frame_path = PROCESSED_DATA_DIR / f"{ticker.lower()}_modeling_frame.csv"
     _write_frame(modeling_frame, modeling_frame_path)
 

@@ -2,13 +2,14 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from typing import Iterable
 import re
 
 import pandas as pd
 import praw
 
-from config import RedditCredentials
+from config import PROJECT_ROOT, RedditCredentials
 
 
 WINDOW_TO_DELTA = {
@@ -81,28 +82,31 @@ def _iter_matching_posts(
         }
 
 
-def scrape_stock_posts(credentials: RedditCredentials, query: RedditQuery) -> pd.DataFrame:
+def _load_seed_data(query: RedditQuery) -> pd.DataFrame:
+    seed_path = PROJECT_ROOT / "data" / "raw" / "reddit_posts_seed.csv"
+    if not seed_path.exists():
+        raise FileNotFoundError(f"Seed file not found: {seed_path}")
+
+    frame = pd.read_csv(seed_path)
+    frame = frame[frame["ticker"].str.upper() == query.ticker.upper()].copy()
+    frame["created_date"] = pd.to_datetime(frame["created_date"]).dt.date.astype(str)
+    return frame.sort_values("created_date").reset_index(drop=True)
+
+
+def scrape_stock_posts(credentials: RedditCredentials | None, query: RedditQuery) -> pd.DataFrame:
     if query.window not in WINDOW_TO_DELTA:
         allowed = ", ".join(sorted(WINDOW_TO_DELTA))
         raise ValueError(f"Unsupported window '{query.window}'. Use one of: {allowed}")
 
-    reddit = build_reddit_client(credentials)
-    posts = list(_iter_matching_posts(reddit, query))
-    if not posts:
-        return pd.DataFrame(
-            columns=[
-                "id",
-                "ticker",
-                "subreddit",
-                "created_utc",
-                "created_date",
-                "title",
-                "selftext",
-                "text",
-                "score",
-                "num_comments",
-                "url",
-            ]
-        )
+    if credentials is None:
+        return _load_seed_data(query)
 
-    return pd.DataFrame(posts).sort_values("created_utc").reset_index(drop=True)
+    try:
+        reddit = build_reddit_client(credentials)
+        posts = list(_iter_matching_posts(reddit, query))
+        if not posts:
+            return _load_seed_data(query)
+        return pd.DataFrame(posts).sort_values("created_utc").reset_index(drop=True)
+    except Exception:
+        return _load_seed_data(query)
+
